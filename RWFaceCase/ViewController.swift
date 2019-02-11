@@ -40,6 +40,10 @@ class ViewController: UIViewController {
   @IBOutlet weak var messageLabel: UILabel!
   
   @IBOutlet weak var recordButton: UIButton!
+    
+    var session: ARSession {
+        return sceneView.session
+    }
 
   // MARK: - View Management
 
@@ -54,10 +58,14 @@ class ViewController: UIViewController {
 
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
+    UIApplication.shared.isIdleTimerDisabled = true
+    resetTracking()
   }
 
   override func viewWillDisappear(_ animated: Bool) {
     super.viewWillDisappear(animated)
+    UIApplication.shared.isIdleTimerDisabled = false
+    sceneView.session.pause()
   }
 
   override func didReceiveMemoryWarning() {
@@ -72,6 +80,7 @@ class ViewController: UIViewController {
 
   @IBAction func didTapReset(_ sender: Any) {
     print("didTapReset")
+    resetTracking()
   }
 
   @IBAction func didTapMask(_ sender: Any) {
@@ -102,6 +111,18 @@ extension ViewController: ARSCNViewDelegate {
   // Tag: ARFaceGeometryUpdate
 
   // Tag: ARSession Handling
+    func session(_ session: ARSession, didFailWithError error: Error) {
+        print("** didFailWithError")
+        updateMessage(text: "Session failed.")
+    }
+    func sessionWasInterrupted(_ session: ARSession) {
+        print("** sessionWasInterrupted")
+        updateMessage(text: "Session interrupted.")
+    }
+    func sessionInterruptionEnded(_ session: ARSession) {
+        print("** sessionInterruptionEnded")
+        updateMessage(text: "Session interruption ended.")
+    }
 }
 
 // MARK: - Private methods
@@ -118,6 +139,23 @@ private extension ViewController {
   }
 
   // Tag: ARFaceTrackingConfiguration
+    
+    func resetTracking() {
+        // 1
+        guard ARFaceTrackingConfiguration.isSupported else {
+            updateMessage(text: "Face Tracking Not Supported.")
+            return
+        }
+        // 2
+        updateMessage(text: "Looking for a face.")
+        // 3
+        let configuration = ARFaceTrackingConfiguration()
+        configuration.isLightEstimationEnabled = true /* default setting */
+        configuration.providesAudioData = false /* default setting */
+        // 4
+        session.run(configuration, options:
+            [.resetTracking, .removeExistingAnchors])
+    }
 
   // Tag: CreateARSCNFaceGeometry
 
