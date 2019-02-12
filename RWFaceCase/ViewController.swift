@@ -35,6 +35,9 @@ import ARKit
 class ViewController: UIViewController {
 
   // MARK: - Properties
+    var anchorNode: SCNNode?
+    var mask: Mask?
+    var maskType = MaskType.basic
 
   @IBOutlet var sceneView: ARSCNView!
   @IBOutlet weak var messageLabel: UILabel!
@@ -50,6 +53,8 @@ class ViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     setupScene()
+    createFaceGeometry()
+
   }
 
   override func viewWillAppear(_ animated: Bool) {
@@ -85,6 +90,16 @@ class ViewController: UIViewController {
 
   @IBAction func didTapMask(_ sender: Any) {
     print("didTapMask")
+    switch maskType {
+    case .basic:
+        maskType = .zombie
+    case .painted:
+        maskType = .basic
+    case .zombie:
+        maskType = .painted
+    }
+    mask?.swapMaterials(maskType: maskType)
+    resetTracking()
   }
 
   @IBAction func didTapGlasses(_ sender: Any) {
@@ -105,11 +120,38 @@ class ViewController: UIViewController {
 extension ViewController: ARSCNViewDelegate {
 
   // Tag: SceneKit Renderer
+    func renderer(_ renderer: SCNSceneRenderer, updateAtTime time:
+        TimeInterval) {
+        // 1
+        guard let estimate = session.currentFrame?.lightEstimate else {
+            return
+        }
+        // 2
+        let intensity = estimate.ambientIntensity / 1000.0
+        sceneView.scene.lightingEnvironment.intensity = intensity
+        // 3
+        let intensityStr = String(format: "%.2f", intensity)
+        let sceneLighting = String(format: "%.2f",
+                                   sceneView.scene.lightingEnvironment.intensity)
+        // 4
+        print("Intensity: \(intensityStr) - \(sceneLighting)")
+    }
 
   // Tag: ARNodeTracking
+    func renderer(_ renderer: SCNSceneRenderer, didAdd node: SCNNode, for
+        anchor: ARAnchor) {
+        anchorNode = node
+        setupFaceNodeContent()
+    }
 
   // Tag: ARFaceGeometryUpdate
-
+    func renderer(_ renderer: SCNSceneRenderer, didUpdate node: SCNNode, for
+        anchor: ARAnchor) {
+        guard let faceAnchor = anchor as? ARFaceAnchor else { return }
+        updateMessage(text: "Tracking your face.")
+        mask?.update(withFaceAnchor: faceAnchor)
+    }
+    
   // Tag: ARSession Handling
     func session(_ session: ARSession, didFailWithError error: Error) {
         print("** didFailWithError")
@@ -136,6 +178,11 @@ private extension ViewController {
 
     // Show statistics such as fps and timing information
     sceneView.showsStatistics = true
+    // Setup environment
+    /* default settings */
+    sceneView.automaticallyUpdatesLighting = true
+    sceneView.autoenablesDefaultLighting = false
+    sceneView.scene.lightingEnvironment.intensity = 1.0
   }
 
   // Tag: ARFaceTrackingConfiguration
@@ -158,8 +205,22 @@ private extension ViewController {
     }
 
   // Tag: CreateARSCNFaceGeometry
+    func createFaceGeometry() {
+        updateMessage(text: "Creating face geometry.")
+        let device = MTLCreateSystemDefaultDevice()
+        
+        let maskGeometry = ARSCNFaceGeometry(device: device!)!
+        mask = Mask(geometry: maskGeometry, maskType: maskType)
+    }
 
   // Tag: Setup Face Content Nodes
+    func setupFaceNodeContent() {
+        guard let node = anchorNode else { return }
+        node.childNodes.forEach { $0.removeFromParentNode() }
+        if let content = mask {
+            node.addChildNode(content)
+        }
+    }
 
   // Tag: Update UI
   func updateMessage(text: String) {
