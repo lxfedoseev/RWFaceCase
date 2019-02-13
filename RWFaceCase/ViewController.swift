@@ -32,12 +32,22 @@ import UIKit
 import SceneKit
 import ARKit
 
+enum ContentType: Int {
+    case none
+    case mask
+    case glasses
+    case pig
+}
+
 class ViewController: UIViewController {
 
   // MARK: - Properties
     var anchorNode: SCNNode?
     var mask: Mask?
     var maskType = MaskType.basic
+    var contentTypeSelected: ContentType = .none
+    var glasses: Glasses?
+    var pig: Pig?
 
   @IBOutlet var sceneView: ARSCNView!
   @IBOutlet weak var messageLabel: UILabel!
@@ -85,6 +95,7 @@ class ViewController: UIViewController {
 
   @IBAction func didTapReset(_ sender: Any) {
     print("didTapReset")
+    contentTypeSelected = .none
     resetTracking()
   }
 
@@ -100,14 +111,19 @@ class ViewController: UIViewController {
     }
     mask?.swapMaterials(maskType: maskType)
     resetTracking()
+    contentTypeSelected = .mask
   }
 
   @IBAction func didTapGlasses(_ sender: Any) {
     print("didTapGlasses")
+    contentTypeSelected = .glasses
+    resetTracking()
   }
 
   @IBAction func didTapPig(_ sender: Any) {
     print("didTapPig")
+    contentTypeSelected = .pig
+    resetTracking()
   }
 
   @IBAction func didTapRecord(_ sender: Any) {
@@ -149,7 +165,15 @@ extension ViewController: ARSCNViewDelegate {
         anchor: ARAnchor) {
         guard let faceAnchor = anchor as? ARFaceAnchor else { return }
         updateMessage(text: "Tracking your face.")
-        mask?.update(withFaceAnchor: faceAnchor)
+        switch contentTypeSelected {
+        case .none: break
+        case .mask:
+            mask?.update(withFaceAnchor: faceAnchor)
+        case .glasses:
+            glasses?.update(withFaceAnchor: faceAnchor)
+        case .pig:
+            pig?.update(withFaceAnchor: faceAnchor)
+        }
     }
     
   // Tag: ARSession Handling
@@ -211,14 +235,30 @@ private extension ViewController {
         
         let maskGeometry = ARSCNFaceGeometry(device: device!)!
         mask = Mask(geometry: maskGeometry, maskType: maskType)
+        let glassesGeometry = ARSCNFaceGeometry(device: device!)!
+        glasses = Glasses(geometry: glassesGeometry)
+        let pigGeometry = ARSCNFaceGeometry(device: device!)!
+        pig = Pig(geometry: pigGeometry)
     }
 
   // Tag: Setup Face Content Nodes
     func setupFaceNodeContent() {
         guard let node = anchorNode else { return }
         node.childNodes.forEach { $0.removeFromParentNode() }
-        if let content = mask {
-            node.addChildNode(content)
+        switch contentTypeSelected {
+        case .none: break
+        case .mask:
+            if let content = mask {
+                node.addChildNode(content)
+            }
+        case .glasses:
+            if let content = glasses {
+                node.addChildNode(content)
+            }
+        case .pig:
+            if let content = pig {
+                node.addChildNode(content)
+            }
         }
     }
 
