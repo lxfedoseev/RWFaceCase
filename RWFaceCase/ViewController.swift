@@ -31,6 +31,7 @@
 import UIKit
 import SceneKit
 import ARKit
+import ReplayKit
 
 enum ContentType: Int {
     case none
@@ -48,6 +49,8 @@ class ViewController: UIViewController {
     var contentTypeSelected: ContentType = .none
     var glasses: Glasses?
     var pig: Pig?
+    let sharedRecorder = RPScreenRecorder.shared()
+    private var isRecording = false
 
   @IBOutlet var sceneView: ARSCNView!
   @IBOutlet weak var messageLabel: UILabel!
@@ -62,6 +65,7 @@ class ViewController: UIViewController {
 
   override func viewDidLoad() {
     super.viewDidLoad()
+    sharedRecorder.delegate = self
     setupScene()
     createFaceGeometry()
 
@@ -128,6 +132,15 @@ class ViewController: UIViewController {
 
   @IBAction func didTapRecord(_ sender: Any) {
     print("didTapRecord")
+    guard sharedRecorder.isAvailable else {
+        print("Recording is not available.")
+        return
+    }
+    if !isRecording {
+        startRecording()
+    } else {
+        stopRecording()
+    }
   }
 }
 
@@ -271,5 +284,115 @@ private extension ViewController {
 }
 
 // MARK: - RPPreviewViewControllerDelegate (ReplayKit)
-
-
+extension ViewController: RPPreviewViewControllerDelegate, RPScreenRecorderDelegate {
+    
+    // RPScreenRecorderDelegate methods
+    func screenRecorder(_ screenRecorder: RPScreenRecorder,
+                        didStopRecordingWith previewViewController: RPPreviewViewController?,
+                        error: Error?) {
+        guard error == nil else {
+            print("There was an error recording: \(String(describing:error?.localizedDescription))")
+            self.isRecording = false
+            return
+        }
+    }
+    
+    
+    // RPPreviewViewControllerDelegate methods
+    func previewControllerDidFinish(_ previewController:
+        RPPreviewViewController) {
+        print("previewControllerDidFinish")
+        dismiss(animated: true)
+    }
+    
+    // Private functions
+    private func startRecording() {
+        // 1
+        self.sharedRecorder.isMicrophoneEnabled = true
+        // 2
+        sharedRecorder.startRecording( handler: { error in
+            guard error == nil else {
+                print("There was an error starting the recording: \(String(describing: error?.localizedDescription))")
+                return
+            }
+            // 3
+            print("Started Recording Successfully")
+            self.isRecording = true
+            // 4
+            DispatchQueue.main.async {
+                self.recordButton.setTitle("[ STOP RECORDING ]", for: .normal)
+                self.recordButton.backgroundColor = UIColor.red
+            }
+        }) }
+    
+    func stopRecording() {
+        // 1
+        self.sharedRecorder.isMicrophoneEnabled = false
+        // 2
+        sharedRecorder.stopRecording( handler: {
+            previewViewController, error in
+            guard error == nil else {
+                print("There was an error stopping the recording: \(String(describing: error?.localizedDescription))")
+                return
+            }
+            // 3 ** UPDATED
+            // 3.1
+            let alert = UIAlertController(title: "Recording Complete",
+                                          message: "Do you want to preview/edit your recording or delete it?", preferredStyle: .alert)
+            // 3.2
+            let deleteAction = UIAlertAction(title: "Delete",
+                                             style: .destructive,
+                                             handler: { (action: UIAlertAction) in
+                                                self.sharedRecorder.discardRecording(handler: { () -> Void in
+                                                    print("Recording deleted.")
+                                                })
+            })
+            // 3.3
+            let editAction = UIAlertAction(title: "Edit",
+                                           style: .default,
+                                           handler: { (action: UIAlertAction) -> Void
+                                            in
+                                            if let unwrappedPreview = previewViewController {
+                                                unwrappedPreview.previewControllerDelegate = self
+                                                self.present(unwrappedPreview, animated: true, completion: {})
+                                            }
+            })
+            // 3.4
+            alert.addAction(editAction)
+            alert.addAction(deleteAction)
+            self.present(alert, animated: true, completion: nil)
+        })
+        // 4
+        self.isRecording = false
+        DispatchQueue.main.async {
+            self.recordButton.setTitle("[ RECORD ]", for: .normal)
+            self.recordButton.backgroundColor = UIColor(red: 0.0039,
+                                                        green: 0.5882, blue: 1, alpha: 1.0) /* #0196ff */
+        }
+    }
+    
+    func screenRecorderDidChangeAvailability(_ screenRecorder:
+        RPScreenRecorder) {
+        recordButton.isEnabled = sharedRecorder.isAvailable
+        if !recordButton.isEnabled {
+            self.isRecording = false
+        }
+        // Update the title in code
+        if sharedRecorder.isAvailable {
+            DispatchQueue.main.async {
+                self.recordButton.setTitle("[ RECORD ]", for: .normal)
+                self.recordButton.backgroundColor = UIColor(red: 0.0039,
+                                                            green: 0.5882,
+                                                            blue: 1,
+                                                            alpha: 1.0)
+            }
+        } else {
+           
+            DispatchQueue.main.async {
+                self.recordButton.setTitle("[ RECORDING DISABLED ]",
+                                           for: .normal)
+                self.recordButton.backgroundColor = UIColor.red
+            } }
+    }
+    
+}
